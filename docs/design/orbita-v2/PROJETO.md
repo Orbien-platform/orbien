@@ -6,7 +6,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 
 - **Item no plano:** `PROD-29` em [`docs/PLANO.md`](../../PLANO.md). O plano
   continua sendo a fonte única do que falta; este arquivo detalha o item.
-- **Atualizado em:** 2026-10-04.
+- **Atualizado em:** 2026-11-06 (conferido contra o código de `main`).
 - **Branch da primeira entrega:** `feat/orbita-v2-tokens-e-menu`.
 - **Branch da primeira entrega do app:** `claude/optimistic-davinci-q37vdu`.
 
@@ -15,9 +15,9 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 | Superfície | Estado | O que tem | O que falta |
 |---|---|---|---|
 | Site (`apps/site`) | **Entregue** | As 8 páginas da v2 e as 5 de apoio (hub de funcionalidades, contato, LGPD, login e 404), só no tema escuro, com tokens, fontes, títulos, CTAs, órbita no hero e brilho do CTA final | Itens menores em [§2.3](#23-o-que-ficou-de-fora) |
-| Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em serifa, menu em seções, identidade da igreja no menu, caminho no topo e anéis no fundo | Todas as telas da v2 e o header completo — [§3.2](#32-o-que-falta) |
-| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, navegação em 5 abas, aba Mais, cadastro de visitante (líder incluso), Privacidade (LGPD), presença já marcada, transição de entrada, login, destaque da v2, QR de check-in (líder e leitor) e QR de autocadastro | Contribuir nativo e o resto das telas — [§4.2](#42-o-que-falta) |
-| Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em serifa, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
+| Painel (`apps/web`) | **Começado** | Tokens, fontes, botão pill, títulos em Geist 500, menu em seções, identidade da igreja no menu, caminho no topo, anéis no fundo, coroa Premium, Indicadores, Materiais, QR de visitantes e Kids | Header completo, estados, Início por papel, páginas próprias e sub-áreas — [§3.2](#32-o-que-falta) |
+| App (`apps/mobile`) | **Começado** | Tokens, fontes, escuro como padrão, 5 abas, Mais, Início por papel, Escalas, Contribuir (Starter), Privacidade, visitante, QRs, sem conexão que se recupera e transições | Central de notificações, convite Premium, skeleton e termo da igreja nas telas — [§4.2](#42-o-que-falta) |
+| Console (`apps/admin`) | **Entregue** | Herda a linguagem do painel: tokens, fontes, tema escuro padrão, menu, títulos em Geist 500, botões pill, tabelas com cabeçalho mono, anéis no fundo — [§3.3](#33-console-appsadmin) | — |
 
 ---
 
@@ -33,6 +33,10 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 - **Fontes no repositório.** Geist, Geist Mono e Instrument Serif ficam em
   `src/fonts/` (subset latin do @fontsource, licença OFL ao lado), carregadas
   por `next/font/local`. `next/font/google` já derrubou o CI uma vez (#128).
+  **A Instrument Serif só vive no site.** Em 2026-10-10 (`b6dd34e`) o painel,
+  o console e o app trocaram a serifa por Geist 500 com tracking fechado e
+  removeram a fonte; onde este documento fala em "serifa" para o produto, vale
+  essa troca.
 - **Etiquetas de origem do README:**
   - `EXISTE`: reestilizar e reposicionar;
   - `API`: implementar a tela;
@@ -63,7 +67,7 @@ no [`README.md`](README.md) deste pacote. Este documento acompanha a execução.
 - `::selection` em teal.
 
 **Tipografia**
-- `h1` e `h2` em Instrument Serif 400, por regra global fora de camada. Ela
+- `h1` e `h2` em Instrument Serif 400 (só o site manteve a serifa), por regra global fora de camada. Ela
   vence os `font-semibold` e `tracking-*` que cada seção trazia da v1.
 - Título de abertura das páginas com o utilitário `text-display`
   (`clamp(52px, 7.2vw, 104px)`).
@@ -124,9 +128,9 @@ item separado. O defeito já existia antes da v2.
 - **Selos do hero nas outras páginas.** Os selos abaixo do CTA viraram mono
   só na home, que é onde o print da v2 mostra. Nas outras páginas seguem em
   sans.
-- **Reescrita do guia de marca.** A seção 3 de
-  `orbien-brand-guidelines.md` precisa ser reescrita para a Órbita. Por
-  enquanto há só o aviso.
+- ~~**Reescrita do guia de marca.**~~ Feita em 2026-11-06: a seção 3 de
+  `design-reference/orbien-brand-guidelines.md` descreve a Órbita, e a seção 5
+  perdeu as referências à v1.
 
 ---
 
@@ -140,10 +144,11 @@ item separado. O defeito já existia antes da v2.
   - `navy` passa a apontar para `--brand`;
   - no escuro, `text-navy` e `text-crimson` usam a versão clara do tom;
   - elevação por borda, quase sem sombra no escuro.
-- **Fontes:** Geist, Geist Mono e Instrument Serif. A DM saiu do web.
+- **Fontes:** Geist e Geist Mono. A DM saiu do web; a Instrument Serif entrou
+  e saiu (2026-10-10), os títulos são Geist 500.
 - **Primitivas:**
   - `<Button>` em pill;
-  - utilitários `page-title` (Instrument Serif 28px) e `label-mono`;
+  - utilitários `page-title` (Geist 500, 28px) e `label-mono`;
   - título de todas as telas do `(admin)` com `page-title`.
 - **Menu em seções** (`src/lib/navigation.ts`):
   - seções: Início, Pessoas, Comunidade, Cultos e serviço, Comunicação,
@@ -161,6 +166,14 @@ item separado. O defeito já existia antes da v2.
 
 ### 3.2 O que falta
 
+**Estado conferido em 2026-11-06.** Desde 2026-10-04 entraram no painel, fora
+da tabela abaixo: Indicadores de pessoas (`/pessoas/indicadores`), Materiais
+(`/materiais`), QR de visitantes com impressão (`/pessoas/qr-visitantes`), Kids
+(`/kids`) e a edição do termo da igreja. Os rótulos "falta" abaixo valem para o
+que não aparece nesta lista. Nenhuma tela ganhou rota própria nem sub-área:
+detalhe de pessoa, grupo e celebração segue em `Sheet`, e Financeiro,
+Publicações e Configurações seguem como páginas de abas.
+
 Rotas sugeridas pelo README: `/pessoas/:id`, `/grupos/:id`,
 `/celebracoes/:id`, `/financeiro/{geral|lancamentos|doacoes|relatorios|conciliacao|exportacao|cadastros}`
 e `/admin/{igreja|usuarios|identidade|plano|lgpd|auditoria}`.
@@ -168,7 +181,9 @@ e `/admin/{igreja|usuarios|identidade|plano|lgpd|auditoria}`.
 **Shell e regras transversais**
 - [ ] **Header completo:** busca (⌘K), tema, notificações e menu da conta
   ("Nome e e-mail", "Trocar senha", "Sair"). A frase "Escalas e perfil pessoal
-  ficam no app" também entra no menu da conta.
+  ficam no app" também entra no menu da conta. Hoje o header tem caminho,
+  tema, um sino sem ação e o menu da conta (nome, papel, Perfil,
+  Configurações, Sair).
 - [x] **Coroa nos itens Premium e convite "Disponível no plano Premium"**
   (2026-10-04, branch `feat/plano-e-terminologia-no-painel`).
   - `GET /me/permissions` devolve `plan` e `upgrade_areas` (as áreas que o
@@ -206,12 +221,12 @@ e `/admin/{igreja|usuarios|identidade|plano|lgpd|auditoria}`.
 |---|---|---|---|
 | Início | Início por papel: pastor/admin, secretaria, tesoureiro, líder de ministério, supervisor/líder | `/dashboard` (igual para todos) | `EXISTE` + `API` |
 | Pessoas | Lista e página da pessoa (seções com âncora) | `/pessoas` + `PersonSheet` | `EXISTE` → página |
-| Pessoas | Visitantes (QR de autocadastro por origem) | — | `API` |
+| Pessoas | Visitantes (QR de autocadastro por origem) | `/pessoas/qr-visitantes` — **entregue** | `API` |
 | Pessoas | Famílias | — | `API` |
-| Pessoas | Indicadores (demográfico) | — | `API` |
+| Pessoas | Indicadores (demográfico) | `/pessoas/indicadores` — **entregue** | `API` |
 | Comunidade | Lista e página do grupo: visão geral, membros, encontros, materiais, oração, chat, pedidos de visita, ausências, árvore | `/grupos` + `GroupDetailSheet` | `EXISTE` → página |
 | Comunidade | Redes | `/redes` | `EXISTE` |
-| Comunidade | Materiais (biblioteca) | só dentro do encontro | `API` |
+| Comunidade | Materiais (biblioteca) | `/materiais` — **entregue** | `API` |
 | Comunidade | Saúde (Premium) | — | `API` |
 | Cultos e serviço | Celebrações e página da celebração (OC, setlist, escala) | `/celebracoes` + `CelebrationDetailSheet` | `EXISTE` → página |
 | Cultos e serviço | Escalas por período | — | `API` |
@@ -274,11 +289,11 @@ na tela "em breve" do site.
     e ícone que usava a cor pura passou a `brandInk`.
   - Forma: botão em pill, card 18px, modal 20px, campo 10px; elevação por
     borda no escuro (sombra só no que flutua). Ícones com traço 1.6.
-- [x] **Fontes:** `@expo-google-fonts/geist`, `geist-mono` e
-  `instrument-serif`, importadas por peso; DM Sans e DM Mono saíram. Títulos
-  (`display`, `h1`, `h2`) em Instrument Serif; `label` em Geist Mono caixa
-  alta com tracking .14em. **Fonte nova exige build nativa, não OTA.**
-  Conferido no `expo export` de Android: as 8 fontes empacotadas.
+- [x] **Fontes:** `@expo-google-fonts/geist` e `geist-mono`, importadas por
+  peso; DM Sans e DM Mono saíram. A Instrument Serif entrou e saiu
+  (2026-10-10, `b6dd34e`): títulos (`display`, `h1`, `h2`) em Geist 500;
+  `label` em Geist Mono caixa alta com tracking .14em. **Fonte nova exige
+  build nativa, não OTA.**
 - [x] **`apps/mobile/STYLE-GUIDE.md`** reescrito para a Órbita (v0.2).
 - [x] **Estado sem conexão:** já existia — `describeLoadError` distingue
   "sem resposta do servidor" e as telas desenham o ícone de wifi com
@@ -301,10 +316,10 @@ na tela "em breve" do site.
 
 | Grupo | Tela | Estado |
 |---|---|---|
-| Acesso | Login (sem escolher igreja, sem biometria) | [x] Título em serifa e "Sua conta já sabe qual é" |
+| Acesso | Login (sem escolher igreja, sem biometria) | [x] Título em Geist 500 e "Sua conta já sabe qual é" |
 | Acesso | Transição que aplica cor e logo da igreja | [x] `ChurchWelcome`: só depois de um login, até o `GET /settings` resolver (900 ms a 3 s) |
-| Abas | Início: destaque | [x] Selo "Destaque" quando os posts foram escolhidos no painel; saudação em serifa |
-| Abas | Conteúdo, Bíblia, {termo} | [x] Título da aba em serifa; o resto herda os tokens |
+| Abas | Início: destaque | [x] Selo "Destaque" quando os posts foram escolhidos no painel; saudação em Geist 500 |
+| Abas | Conteúdo, Bíblia, {termo} | [x] Título da aba em Geist 500; o resto herda os tokens |
 | Abas | Mais | [x] Escalas e Celebrações (área `volunteers`), Contribuir, Dízimo automático (trava `PROD-28` + Premium), Notificações, Perfil, Privacidade, Sair |
 | Pessoal | Privacidade e meus dados (LGPD) | [x] Meus dados com correção, consentimentos com revogação, exportação pela folha de compartilhamento, pedido de exclusão cancelável (30 dias). API nova: rotas `/me` do `CONF-03` |
 | Célula | Presença (líder): todos marcados, toque desmarca | [x] Na primeira chamada do encontro; com presença já registrada, ninguém vem pré-marcado. Falha mantém as marcações |
@@ -331,26 +346,35 @@ na tela "em breve" do site.
 - [x] **QR de autocadastro** (liderança) — feito no app (2026-10-04), com a
   página pública que o QR abre no `apps/web`, `/visitante/{slug}/{token}`
   (`PROD-34`).
-- [ ] **QRs — o que ficou de fora:** limite do autocadastro por IP no wi-fi da
-  igreja (`PEND-18`), teste em aparelho, gerenciar QR de autocadastro e
-  leitura do código vigente (`PEND-19`).
+- [ ] **QRs — o que ficou de fora:** teste em aparelho. O limite do
+  autocadastro por IP (`PEND-18`) fechou em 2026-11-04, e gerenciar o QR de
+  autocadastro e ler o código vigente (`PEND-19`) saíram em 2026-11-05
+  (`3271892`).
 - [x] **Cadastro de visitante pelo líder de célula** — feito (2026-10-04),
   `POST /visitors`.
 - [x] **Contribuir nativo — variante Starter** (`PROD-31`, 2026-10-05):
   categoria, anônima ou identificada e chave PIX para copiar, na tela
   `/contribuir`.
 - [ ] **Contribuir — o que ficou de fora:** QR dinâmico e recorrente (dependem
-  do `PROD-28`), categorias vindas da igreja e teste em aparelho.
+  do `PROD-28`) e teste em aparelho. Categorias vindas da igreja saíram
+  (`cf209aa`).
 - [x] **Minhas escalas** (`PROD-35`, 2026-10-06): Próximas, Trocas e Meu
   perfil em abas segmentadas na mesma pilha; "Pedir troca" abre os
   substitutos do ministério (`/troca/[id]`). A API ganhou o pedido de troca
   (`assignment_swap_requests`, RLS `025`) e `GET /volunteers/me/profile`.
-- [ ] **Minhas escalas — o que ficou de fora:** o voluntário editar a própria
-  disponibilidade e o termo de voluntariado (`PROD-36`), check-in por QR ou
-  localização (`promessa` no protótipo) e teste em aparelho.
-- [ ] **Celebração:** minha função em destaque já existe; o modo ao vivo do
-  Host é `PROPOSTA`.
-- [ ] **Notificações:** central + preferências em abas (segmentado).
+- [ ] **Minhas escalas — o que ficou de fora:** check-in por QR ou localização
+  (`promessa` no protótipo) e teste em aparelho. O voluntário editar a própria
+  disponibilidade e aceitar o termo saiu (`PROD-36`, `dd3b298`).
+- [ ] **Celebração:** minha função em destaque existe, mas só acende com
+  `?ministryId=` (o atalho da Home não o passa); a seção Equipe é só o badge de
+  logística e a linha "Na escala:". O modo ao vivo do Host é `PROPOSTA`.
+- [ ] **Notificações:** central + preferências em abas (segmentado). Hoje
+  `notificacoes.tsx` é uma lista de 6 interruptores e a API não lista
+  notificações; fica depois do `PROD-32`, que mexe na mesma tela.
+- [ ] **Skeleton e "sem acesso" compartilhado:** o carregamento é texto ou
+  spinner e cada tela monta o seu cadeado.
+- [ ] **Termo da igreja nas telas:** `useGroupTerm` só vale na aba, nos
+  títulos e em `HomeRoleBlocks`; ~16 textos seguem fixos em "grupo".
 - [x] **Sem conexão** que atualiza sozinho (`PROD-32`, 2026-11-02, `netinfo`; exige build nativa e bump de versão, não sai por OTA; faltam telas de outras sessões e teste em aparelho, `PEND-23`).
 - [x] **Transições** fade + translateY(3px), 180 ms, entre telas (`PROD-33`, 2026-11-02; teste em aparelho em `PEND-23`).
 - [ ] **Convite Premium** ("Disponível no plano Premium" + "Conhecer o
@@ -370,7 +394,23 @@ na tela "em breve" do site.
    plano (vem do token). O que faltava era saber *quais* áreas o Premium
    abriria para o papel — é o `upgrade_areas`.
 
+**Tomada em 2026-10-10:**
+
+5. **Títulos do produto em Geist 500, sem serifa** (`b6dd34e`). O site mantém
+   a Instrument Serif. A v2 do handoff é referência nesse ponto.
+
+**Tomadas em 2026-11-06 (plano da rodada 1):**
+
+6. Termo da igreja nas telas por **reescrita sem artigo** ("Adicionar
+   {termo}"), sem campo de gênero e sem migration. Push e respostas da API
+   que citam "grupo" ou "célula" ficam fora da rodada 1.
+7. "Trocar senha" reaproveita o fluxo `esqueci-senha`; o sino do painel some
+   até existir a central de notificações.
+8. Copy do site: trocar "Precision Modern" por "Órbita", manter os títulos do
+   React e não prometer recorrência enquanto `ASAAS_PAYMENTS_ENABLED` estiver
+   desligada.
+
 **Ainda em aberto:**
 
-1. **Copy do site:** os títulos da v2 contra os do React (§2.3), e a menção
-   a "Precision Modern" na página Sobre.
+1. **Títulos da v2 contra os do React** (§2.3), fora o Financeiro: ficam os do
+   React até decisão em contrário.
