@@ -25,7 +25,7 @@ const MODULES = [
       </svg>
     ),
     title: "Financeiro",
-    body: "PIX com recibo automático, dízimo recorrente e relatório semanal sem trabalho manual. Do Starter ao balanço anual para o conselho.",
+    body: "PIX com recibo automático e relatório semanal sem trabalho manual. Do Starter ao balanço anual para o conselho.",
     highlights: ["PIX sem taxa no Starter", "Dízimo automático", "Exportação contábil"],
   },
   {

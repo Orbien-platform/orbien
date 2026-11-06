@@ -130,7 +130,7 @@ export function PequenosGruposHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+            <div className="flex gap-5 flex-wrap font-mono text-[11px] uppercase tracking-[0.12em]" style={{ color: "var(--muted)" }}>
               {["Semáforo de saúde", "Materiais agendados", "Líder no celular"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />
