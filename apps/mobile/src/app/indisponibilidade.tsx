@@ -10,7 +10,7 @@
 // da semana ("todo domingo") possível de ler —, mês por extenso e seleção
 // pela cor da marca com `accessibilityState.selected`, que é o idioma que
 // o leitor de tela entende.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -18,12 +18,14 @@ import { Alert } from "../components/Alert";
 import { AppButton } from "../components/AppButton";
 import { Card } from "../components/Card";
 import { Input } from "../components/Input";
+import { ReconnectNotice } from "../components/ReconnectNotice";
 import { Screen } from "../components/Screen";
 import { SectionLabel } from "../components/SectionLabel";
-import { describeLoadError } from "../lib/api/load-error";
+import { describeLoadError, type LoadErrorState } from "../lib/api/load-error";
 import { useAuth } from "../lib/auth/auth-provider";
 import { getUnavailability, saveUnavailability } from "../lib/escala/escala-client";
 import { formatMonthYear } from "../lib/format/date";
+import { useReloadOnReconnect } from "../lib/network/use-reload-on-reconnect";
 import { ChevronRight, Check } from "../lib/theme/icons";
 import { useTheme } from "../lib/theme/theme-provider";
 import {
@@ -67,7 +69,13 @@ export default function IndisponibilidadeScreen() {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  // Edição pendente neste mês (dias ou observação): a reconexão não relê
+  // sozinha por cima dela (PROD-32). Trocar de mês descarta a edição, como
+  // já fazia, então zera a marca.
+  const dirtyRef = useRef(false);
+  const [reconnected, setReconnected] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -82,21 +90,34 @@ export default function IndisponibilidadeScreen() {
         if (signal.cancelled) return;
         setSelectedDays(new Set((result?.dates ?? []).map((d) => d.date.slice(0, 10))));
         setSaved(false);
+        dirtyRef.current = false;
         setLoadError(null);
       })
       .catch((err: unknown) => {
         if (signal.cancelled) return;
         setSelectedDays(new Set());
+        dirtyRef.current = false;
+        setReconnected(false);
         // Erro visível — distingue "falha ao carregar" de "sem
         // indisponibilidade cadastrada" (tela vazia interpretável como
         // sem dado, mesmo princípio do Edge Case da spec para 403/lista
         // vazia).
-        setLoadError(describeLoadError(err, "sua indisponibilidade").message);
+        setLoadError(describeLoadError(err, "sua indisponibilidade"));
       });
     return () => {
       signal.cancelled = true;
     };
-  }, [month, year, hasAccess]);
+  }, [month, year, hasAccess, retryCount]);
+
+  const reload = () => {
+    setReconnected(false);
+    setRetryCount((n) => n + 1);
+  };
+
+  useReloadOnReconnect(hasAccess && loadError?.offline === true, () => {
+    if (dirtyRef.current) setReconnected(true);
+    else reload();
+  });
 
   if (!hasAccess) {
     return (
@@ -114,6 +135,7 @@ export default function IndisponibilidadeScreen() {
 
   function toggleDay(day: number) {
     const key = dayKey(year, month, day);
+    dirtyRef.current = true;
     setSaved(false);
     setSelectedDays((prev) => {
       const next = new Set(prev);
@@ -261,13 +283,15 @@ export default function IndisponibilidadeScreen() {
           value={notes}
           onChangeText={(text) => {
             setNotes(text);
+            dirtyRef.current = true;
             setSaved(false);
           }}
           multiline
         />
       </View>
 
-      {loadError ? <Alert messageTestID="load-error" message={loadError} /> : null}
+      {loadError ? <Alert messageTestID="load-error" message={loadError.message} /> : null}
+      {loadError && reconnected ? <ReconnectNotice testID="reconnect-notice" onPress={reload} /> : null}
       {saveError ? <Alert messageTestID="save-error" message={saveError} /> : null}
       {saved ? (
         <Alert

@@ -648,21 +648,36 @@ recuperação automática.
 - **Ficaram de fora, de propósito:**
   - `kids/qr/[childId]` — o "Tentar de novo" dela é `issueCheckinQr`, que
     **emite** um token (escrita). Reconexão só pode reler; reemitir sozinha
-    geraria QR que ninguém pediu. Fica sem o hook até a leitura e a emissão
-    serem separadas (decisão de desenho, não de adoção).
-  - `notificacoes` e `indisponibilidade` — o erro de carga é guardado só como
-    texto (sem o `offline`) e a tela continua **editável** por baixo do alerta
-    (chaves de notificação, dias marcados). Uma releitura automática
-    sobrescreveria o que a pessoa já mexeu. Adotar pede antes guardar o
-    `LoadErrorState` e decidir o que fazer com a edição em andamento.
+    geraria QR que ninguém pediu. **Continua de fora, e a causa agora é
+    conhecida (2026-11-06):** não existe leitura do QR vigente a separar da
+    emissão. `KidsQrService.issueCheckin` guarda só o `secret_hash`, e o QR é
+    mostrado uma única vez; uma rota `GET` só poderia devolvê-lo guardando o
+    segredo ou derivando-o por HMAC do id (muda a criptografia da emissão e
+    invalida tokens em voo no deploy). Mesmo assim a tela emite ao abrir (é o
+    pedido do usuário), então a leitura só serviria para trocar o reemitir por
+    um toque a mais na porta da turma. Reemitir substitui o token anterior
+    (`deleteMany` dos não usados do par), mas isso é escrita. Decisão de
+    produto/segurança em aberto: (a) manter só o "Tentar de novo" manual, (b)
+    reemitir na volta quando a 1ª emissão falhou por rede, (c) `GET` com segredo
+    derivado. Sem esta, a PROD-32 fica **parcial** (só esta tela).
+  - `notificacoes` e `indisponibilidade` — **adotadas** na branch
+    `feat/app-reconexao-tres-telas`. O erro de carga passou a guardar o
+    `LoadErrorState` (com `offline`) e a tela marca "edição pendente"
+    (chave de notificação tocada; dia ou observação alterados). Regra: sem
+    edição pendente a volta da conexão relê sozinha; **com** edição pendente
+    não sobrescreve nada e mostra o `ReconnectNotice` ("Conexão voltou. Toque
+    para atualizar"), e a releitura vira escolha da pessoa. Trocar de mês na
+    indisponibilidade zera a marca (já descartava a edição).
 - Testes: hook (cai→volta→1 releitura; já online não recarrega; oscilação;
-  desmontar), integração em `grupos` e, por tela adotada, "cai, volta e faz
+  desmontar), integração em `grupos`, em `notificacoes` e `indisponibilidade`
+  (inclui "edição pendente não é sobrescrita") e, por tela adotada, "cai, volta e faz
   uma única releitura" + "já online não recarrega" (e, onde há escrita na tela,
   que a releitura não a dispara).
 - **Pendente humano — `PEND-23`:** teste em aparelho (modo avião ligado/desligado
   com a tela no erro), só possível com a build nativa. Nada disto foi testado em
   aparelho; só Jest.
-- **Só chega ao usuário com a build nativa do `netinfo`:** a adoção nas telas
+- **Só chega ao usuário com a build nativa do `netinfo`** (vale também para
+  `notificacoes` e `indisponibilidade`; nada nativo novo nesta entrega): a adoção nas telas
   acima é JS, mas importa o módulo nativo — precisa do bump de `version` e do
   EAS Build; um `eas update` para o binário antigo quebra o `import`.
 
