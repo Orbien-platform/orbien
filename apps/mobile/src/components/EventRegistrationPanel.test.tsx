@@ -16,11 +16,13 @@ const mockGetSummary = jest.fn();
 const mockGetMine = jest.fn();
 const mockRegister = jest.fn();
 const mockCancel = jest.fn();
+const mockGetPayment = jest.fn();
 jest.mock("../lib/content/content-client", () => ({
   getEventRegistrationSummary: (...a: unknown[]) => mockGetSummary(...a),
   getMyEventRegistration: (...a: unknown[]) => mockGetMine(...a),
   registerSelfForEvent: (...a: unknown[]) => mockRegister(...a),
   cancelMyEventRegistration: (...a: unknown[]) => mockCancel(...a),
+  getMyEventRegistrationPayment: (...a: unknown[]) => mockGetPayment(...a),
   isPaidRegistration: (result: Record<string, unknown>) => "payment" in result,
 }));
 
@@ -57,6 +59,12 @@ describe("EventRegistrationPanel", () => {
     jest.clearAllMocks();
     mockGetSummary.mockResolvedValue(FREE_OPEN);
     mockGetMine.mockResolvedValue(null);
+    mockGetPayment.mockResolvedValue({
+      state: "pending",
+      qr_code: PAYMENT.qr_code,
+      amount: 80,
+      expires_at: PAYMENT.expires_at,
+    });
   });
 
   it("evento gratuito com vaga: mostra preço, vagas, prazo e o botão de inscrever", async () => {
@@ -351,21 +359,100 @@ describe("EventRegistrationPanel", () => {
     ).toBeUndefined();
   });
 
-  it("pending_payment carregado de uma sessão anterior aparece sem QR", async () => {
+  const PENDING_MINE = {
+    id: "r1",
+    full_name: "Ana",
+    status: "pending_payment",
+    payment_status: "pending",
+    created_at: "2026-09-16T10:00:00.000Z",
+  };
+
+  it("pending_payment ao reabrir a tela relê o PIX e mostra o QR de novo (PEND-07)", async () => {
     mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
-    mockGetMine.mockResolvedValue({
-      id: "r1",
-      full_name: "Ana",
-      status: "pending_payment",
-      payment_status: "pending",
-      created_at: "2026-09-16T10:00:00.000Z",
-    });
+    mockGetMine.mockResolvedValue(PENDING_MINE);
 
     await renderPanel();
 
-    await waitFor(() => expect(screen.getByText("Aguardando pagamento")).toBeTruthy());
-    expect(screen.queryByTestId("event-registration-payment")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("event-registration-payment")).toBeTruthy());
+    expect(mockGetPayment).toHaveBeenCalledWith("post-1");
+    expect(screen.getByTestId("event-registration-pix-code").props.children).toBe(
+      PAYMENT.qr_code,
+    );
+    expect(screen.getByTestId("event-registration-qr")).toBeTruthy();
     expect(screen.getByTestId("event-registration-cancel")).toBeTruthy();
+    // Recuperou: o aviso "cancele e inscreva-se de novo" sai de cena.
+    expect(screen.queryByText(/cancele a inscrição e inscreva-se/)).toBeNull();
+    // Releitura, nunca nova cobrança.
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it("logo após o POST, o QR vem da resposta e não relê o pagamento", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockRegister.mockResolvedValue({ registration: PENDING_MINE, payment: PAYMENT });
+
+    await renderPanel();
+    await waitFor(() => expect(screen.getByTestId("event-registration-submit")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-submit"));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-payment")).toBeTruthy());
+    expect(mockGetPayment).not.toHaveBeenCalled();
+  });
+
+  it("inscrição confirmada ou na fila não relê pagamento", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockGetMine.mockResolvedValue({ ...PENDING_MINE, status: "confirmed" });
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.getByText("Inscrição confirmada")).toBeTruthy());
+    expect(mockGetPayment).not.toHaveBeenCalled();
+  });
+
+  it("PIX já pago: avisa e não mostra QR", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockGetMine.mockResolvedValue(PENDING_MINE);
+    mockGetPayment.mockResolvedValue({ state: "paid" });
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-payment-issue")).toBeTruthy());
+    expect(screen.getByText(/Recebemos o seu pagamento/)).toBeTruthy();
+    expect(screen.queryByTestId("event-registration-payment")).toBeNull();
+  });
+
+  it("PIX vencido: sem QR, e a tela mantém o contorno de refazer a inscrição", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockGetMine.mockResolvedValue(PENDING_MINE);
+    mockGetPayment.mockResolvedValue({ state: "expired" });
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-payment-issue")).toBeTruthy());
+    expect(screen.getByText(/O código do PIX venceu\. Cancele a inscrição/)).toBeTruthy();
+    expect(screen.queryByTestId("event-registration-qr")).toBeNull();
+    expect(screen.getByTestId("event-registration-cancel")).toBeTruthy();
+  });
+
+  it("falha na releitura: mantém o contorno antigo e oferece tentar de novo", async () => {
+    mockGetSummary.mockResolvedValue({ ...FREE_OPEN, registration_price: 80 });
+    mockGetMine.mockResolvedValue(PENDING_MINE);
+    mockGetPayment.mockRejectedValueOnce(new HttpError(503, "indisponível"));
+
+    await renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-payment-retry")).toBeTruthy());
+    expect(screen.getByText(/cancele a inscrição e inscreva-se de novo/)).toBeTruthy();
+    expect(screen.queryByTestId("event-registration-qr")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("event-registration-payment-retry"));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("event-registration-payment")).toBeTruthy());
+    expect(mockGetPayment).toHaveBeenCalledTimes(2);
+    expect(mockRegister).not.toHaveBeenCalled();
   });
 
   // ─── Erros ────────────────────────────────────────────────────────────────

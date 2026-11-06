@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
 import { formatInstant } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
+import { QrImage } from "@/components/people/QrImage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,13 +31,35 @@ interface MyRegistration {
   status: "confirmed" | "waitlisted" | "pending_payment" | "cancelled";
 }
 
-/** O PIX dinâmico que `POST .../registrations/me` devolve em evento pago. */
+/**
+ * O PIX em tela. Vem de duas fontes: `POST .../registrations/me` (traz a
+ * imagem) e a releitura `GET .../registrations/me/payment` (`PEND-07`, só o
+ * `qr_code` — a tela desenha o QR).
+ */
 interface RegistrationPayment {
   /** Payload "copia e cola". */
   qr_code: string;
   /** PNG em base64 **sem** o prefixo `data:` — quem monta a URI é a tela. */
-  qr_code_image: string;
+  qr_code_image?: string;
+  /** ISO — fim da janela de 24h da cobrança. */
+  expires_at?: string;
 }
+
+/** `GET .../registrations/me/payment`: só `pending` traz o payload. */
+type MyPaymentResult =
+  | ({ state: "pending" } & RegistrationPayment)
+  | { state: "paid" }
+  | { state: "expired" };
+
+/** Por que não há QR numa inscrição pendente: já pago, vencido, ou a releitura falhou. */
+type PaymentIssue = "paid" | "expired" | "failed";
+
+const PAYMENT_ISSUE_TEXT: Record<PaymentIssue, string> = {
+  paid: "Recebemos o seu pagamento. A confirmação da vaga pode levar alguns instantes.",
+  expired: "O código do PIX venceu. Cancele a inscrição e inscreva-se de novo para gerar outro.",
+  failed:
+    "Não foi possível carregar o código do PIX. Tente de novo; se persistir, cancele a inscrição e inscreva-se de novo para gerar outro.",
+};
 
 interface PaidRegistrationResult {
   registration: MyRegistration;
@@ -102,14 +125,18 @@ interface EventRegistrationPanelProps {
  * `.../registrations/me`; `GET .../registrations` responde 403 para ele e não
  * há chamada para essa rota aqui.
  *
- * O QR do PIX só existe na resposta de `POST .../registrations/me`
- * (`PEND-07`): ele mora em estado de tela e some ao fechar o post. A nota
- * abaixo do QR diz o que fazer nesse caso — cancelar e se inscrever de novo.
+ * O QR do PIX vem da resposta de `POST .../registrations/me` e, ao reabrir o
+ * post com a inscrição pendente, é relido em `GET .../me/payment` (`PEND-07`):
+ * leitura do que já foi cobrado, nunca uma cobrança nova. Se a releitura
+ * falha ou o código venceu, o contorno antigo segue dito em tela — cancelar e
+ * se inscrever de novo.
  */
 export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) {
   const [summary, setSummary] = useState<RegistrationSummary | null>(null);
   const [mine, setMine] = useState<MyRegistration | null>(null);
   const [payment, setPayment] = useState<RegistrationPayment | null>(null);
+  const [paymentIssue, setPaymentIssue] = useState<PaymentIssue | null>(null);
+  const [paymentRetry, setPaymentRetry] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [actionError, setActionError] = useState("");
@@ -145,6 +172,33 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       signal.cancelled = true;
     };
   }, [postId, retry]);
+
+  // Inscrição pendente sem QR em tela (post reaberto): relê o PIX. Com o
+  // `payment` da resposta do POST já preenchido, não relê.
+  const needsPayment = mine?.status === "pending_payment" && payment === null;
+  // Lendo enquanto falta QR e nenhum motivo de não haver.
+  const paymentLoading = needsPayment && paymentIssue === null;
+  useEffect(() => {
+    if (!needsPayment) return;
+    const signal = { cancelled: false };
+    api
+      .get<MyPaymentResult>(`/content/posts/${postId}/registrations/me/payment`)
+      .then(({ data }) => {
+        if (signal.cancelled) return;
+        if (data.state === "pending") {
+          setPayment({ qr_code: data.qr_code, expires_at: data.expires_at });
+          setPaymentIssue(null);
+        } else {
+          setPaymentIssue(data.state);
+        }
+      })
+      .catch(() => {
+        if (!signal.cancelled) setPaymentIssue("failed");
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [needsPayment, postId, paymentRetry]);
 
   async function refreshSummary() {
     try {
@@ -183,6 +237,7 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       if (isPaidResult(data)) {
         setMine(data.registration);
         setPayment(data.payment);
+        setPaymentIssue(null);
       } else {
         setMine(data);
       }
@@ -193,6 +248,7 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
       await api.delete(`/content/posts/${postId}/registrations/me`);
       setMine(null);
       setPayment(null);
+      setPaymentIssue(null);
       setCopied(false);
     });
 
@@ -295,13 +351,25 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
 
       {payment && (
         <div className="flex flex-col gap-2 rounded-[8px] border border-[var(--border-default)] bg-[var(--surface-subtle)] p-4">
-          {/* Fundo branco fixo: QR em tema escuro, sobre fundo escuro, não lê. */}
-          {/* eslint-disable-next-line @next/next/no-img-element -- data URI do PIX, sem otimização */}
-          <img
-            src={`data:image/png;base64,${payment.qr_code_image}`}
-            alt="QR Code do PIX para pagar a inscrição"
-            className="mx-auto size-48 rounded-[8px] bg-white p-2"
-          />
+          {payment.qr_code_image ? (
+            <>
+              {/* Fundo branco fixo: QR em tema escuro, sobre fundo escuro, não lê. */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- data URI do PIX, sem otimização */}
+              <img
+                src={`data:image/png;base64,${payment.qr_code_image}`}
+                alt="QR Code do PIX para pagar a inscrição"
+                className="mx-auto size-48 rounded-[8px] bg-white p-2"
+              />
+            </>
+          ) : (
+            <div className="mx-auto">
+              <QrImage
+                value={payment.qr_code}
+                size={192}
+                label="QR Code do PIX para pagar a inscrição"
+              />
+            </div>
+          )}
           <p className="text-sm text-stone">
             Escaneie o QR no app do seu banco ou copie o código abaixo.
           </p>
@@ -322,9 +390,36 @@ export function EventRegistrationPanel({ postId }: EventRegistrationPanelProps) 
             {copied ? "Código copiado" : "Copiar código PIX"}
           </button>
           <p className="text-xs text-stone">
-            Este código vale por 24 horas e só aparece aqui agora. Se você fechar este post antes
-            de pagar, cancele a inscrição e inscreva-se de novo para gerar outro.
+            {payment.expires_at
+              ? `Este código vale até ${fmtDateTime(payment.expires_at)}.`
+              : "Este código vale por 24 horas."}{" "}
+            Se você fechar este post, ele volta quando você abri-lo de novo.
           </p>
+        </div>
+      )}
+
+      {!payment && paymentLoading && (
+        <p className="flex items-center gap-2 text-sm text-stone">
+          <Loader2 size={14} className="animate-spin" />
+          Carregando o código do PIX…
+        </p>
+      )}
+
+      {!payment && !paymentLoading && paymentIssue && (
+        <div className="flex flex-col items-start gap-1.5" data-testid="payment-issue">
+          <p className="text-sm text-stone">{PAYMENT_ISSUE_TEXT[paymentIssue]}</p>
+          {paymentIssue === "failed" && (
+            <button
+              type="button"
+              onClick={() => {
+                setPaymentIssue(null);
+                setPaymentRetry((n) => n + 1);
+              }}
+              className="text-sm font-medium text-navy hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy/30 dark:text-white"
+            >
+              Tentar de novo
+            </button>
+          )}
         </div>
       )}
 

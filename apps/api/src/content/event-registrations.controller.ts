@@ -87,6 +87,18 @@ export class EventRegistrationsController {
     );
   }
 
+  /** Relê o PIX da inscrição pendente (`PEND-07`). Só leitura. */
+  @Get('me/payment')
+  @Roles(...ALL_ROLES)
+  findMyPayment(@Param('postId', ParseUUIDPipe) postId: string, @CurrentUser() user: JwtPayload) {
+    return this.registrations.findMyPayment(
+      user.tenant_id,
+      user.congregation_id,
+      postId,
+      user.sub,
+    );
+  }
+
   @Post('me')
   @Roles(...ALL_ROLES)
   registerSelf(@Param('postId', ParseUUIDPipe) postId: string, @CurrentUser() user: JwtPayload) {

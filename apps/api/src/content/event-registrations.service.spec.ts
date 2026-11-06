@@ -576,6 +576,138 @@ describe('EventRegistrationsService', () => {
     });
   });
 
+  describe('findMyPayment (PEND-07)', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const pending = (over: Row = {}) => ({
+      id: 'r1',
+      person_id: 'person-1',
+      status: 'pending_payment',
+      payment_status: 'pending',
+      pix_payment_id: 'pix-1',
+      created_at: new Date(),
+      ...over,
+    });
+    const pixRow = (over: Row = {}) => ({
+      id: 'pix-1',
+      status: 'pending',
+      qr_code: '000201...',
+      amount: { toNumber: () => 50 },
+      created_at: new Date(Date.now() - 60 * 1000),
+      ...over,
+    });
+    function setup(rows: Row[], pix: Row | null = pixRow(), post: Row | null = { ...EVENT, registration_price: price(50) }) {
+      const client = clientWith(post, rows) as ReturnType<typeof clientWith> & {
+        pixPayment: { findFirst: jest.Mock };
+      };
+      client.pixPayment = { findFirst: jest.fn().mockResolvedValue(pix) };
+      const pixService = pixServiceMock();
+      return { client, pixService, service: serviceWith(client, pixService) };
+    }
+
+    it('pendente devolve o payload e a validade, lendo só o banco', async () => {
+      const { service, pixService, client } = setup([pending()]);
+
+      const result = await service.findMyPayment('t1', 'g1', 'p1', 'user-1');
+
+      expect(result).toMatchObject({ state: 'pending', qr_code: '000201...', amount: 50 });
+      expect(new Date((result as { expires_at: string }).expires_at).getTime()).toBeGreaterThan(
+        Date.now(),
+      );
+      // Não cria cobrança nem consulta a Asaas.
+      expect(pixService.createForEventRegistration).not.toHaveBeenCalled();
+      expect(client.pixPayment.findFirst).toHaveBeenCalledWith({
+        where: { id: 'pix-1', tenant_id: 't1' },
+      });
+    });
+
+    it('a pessoa vem da conta no banco, não da requisição', async () => {
+      const { service, client } = setup([pending()]);
+
+      await service.findMyPayment('t1', 'g1', 'p1', 'user-1');
+
+      expect(client.userAccount.findUnique).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        select: { person_id: true },
+      });
+    });
+
+    it('outra pessoa não alcança a inscrição pendente alheia (404)', async () => {
+      const { service, client } = setup([pending({ person_id: 'person-2' })]);
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(client.pixPayment.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('já pago devolve o estado, sem QR', async () => {
+      const { service } = setup([pending({ status: 'confirmed', payment_status: 'paid' })]);
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).resolves.toEqual({
+        state: 'paid',
+      });
+    });
+
+    it('PIX confirmado no banco antes da inscrição virar devolve pago, sem QR', async () => {
+      const { service } = setup([pending()], pixRow({ status: 'confirmed' }));
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).resolves.toEqual({
+        state: 'paid',
+      });
+    });
+
+    it('QR além das 24h devolve expirado, sem QR', async () => {
+      const { service } = setup([pending()], pixRow({ created_at: new Date(Date.now() - DAY - 1000) }));
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).resolves.toEqual({
+        state: 'expired',
+      });
+    });
+
+    it('cobrança falhada devolve expirado, sem QR', async () => {
+      const { service } = setup([pending()], pixRow({ status: 'failed' }));
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).resolves.toEqual({
+        state: 'expired',
+      });
+    });
+
+    it('inscrição cancelada não é alcançada (404)', async () => {
+      const { service } = setup([pending({ status: 'cancelled' })]);
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('pendente sem pagamento ligado, ou com a linha sumida, é 404', async () => {
+      const semLink = setup([pending({ pix_payment_id: null })]);
+      await expect(semLink.service.findMyPayment('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      const sumida = setup([pending()], null);
+      await expect(sumida.service.findMyPayment('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('evento sem preço é 404, como hoje', async () => {
+      const { service } = setup([pending()], pixRow(), { ...EVENT, registration_price: null });
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('quem não se inscreveu recebe 404', async () => {
+      const { service } = setup([]);
+
+      await expect(service.findMyPayment('t1', 'g1', 'p1', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('cancelMine', () => {
     it('cancela a inscrição do próprio usuário', async () => {
       const client = clientWith();
