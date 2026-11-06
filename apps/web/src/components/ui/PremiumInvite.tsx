@@ -26,7 +26,7 @@ export function PremiumInvite({
   return (
     <section
       aria-label={`${resource} — disponível no plano Premium`}
-      className="mx-auto mt-8 flex max-w-md flex-col items-center gap-3 rounded-[14px] border border-[var(--border-default)] bg-[var(--surface-base)] px-6 py-10 text-center"
+      className="mx-auto mt-8 flex max-w-md flex-col items-center gap-3 card-orbita px-6 py-10 text-center"
     >
       <span className="flex size-11 items-center justify-center rounded-full bg-amber-dim text-amber-ink">
         <Crown size={20} strokeWidth={1.6} aria-hidden="true" />
