@@ -12,7 +12,7 @@ describe("EstagioAtual", () => {
     render(<EstagioAtual />);
     for (const texto of [
       "Fundação e arquitetura do produto",
-      "Design system Precision Modern finalizado",
+      "Design system Órbita finalizado",
       "Módulos de membros e finanças em piloto",
     ]) {
       expect(screen.getByText(texto)).toBeInTheDocument();

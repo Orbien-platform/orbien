@@ -3,7 +3,7 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const MARCOS = [
   { status: "done",    label: "Fundação e arquitetura do produto"        },
-  { status: "done",    label: "Design system Precision Modern finalizado" },
+  { status: "done",    label: "Design system Órbita finalizado" },
   { status: "done",    label: "Módulos de membros e finanças em piloto"   },
   { status: "active",  label: "Validação com igrejas-piloto em andamento" },
   { status: "active",  label: "Pequenos grupos e conteúdos em revisão"    },

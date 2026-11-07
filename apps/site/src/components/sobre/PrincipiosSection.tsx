@@ -9,7 +9,7 @@ const PRINCIPIOS = [
       </svg>
     ),
     titulo: "Rigor sem frieza",
-    corpo: "Precisão técnica não precisa ser fria. O produto é exato nos dados, direto na comunicação e bonito no visual — sem sacrificar um pelo outro. Precision Modern é nossa direção de design.",
+    corpo: "Precisão técnica não precisa ser fria. O produto é exato nos dados, direto na comunicação e bonito no visual — sem sacrificar um pelo outro. A Órbita é a nossa linguagem de design: noturna, nítida e com um ponto de luz no que importa.",
   },
   {
     icon: (

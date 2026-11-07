@@ -118,7 +118,7 @@ export function FinanceiroHero() {
               className="font-light leading-[1.55] mb-8 max-w-[500px]"
               style={{ fontSize: "clamp(16px, 1.7vw, 18px)", color: "var(--stone)" }}
             >
-              PIX com recibo automático, relatório semanal pronto para a tesoureira e dízimo recorrente sem nenhum trabalho manual. Transparência financeira sem precisar de um contador no grupo.
+              PIX com recibo automático e relatório semanal pronto para a tesoureira, sem trabalho manual. Transparência financeira sem precisar de um contador no grupo.
             </p>
 
             <div className="flex gap-3 flex-wrap items-center mb-7">
@@ -140,7 +140,7 @@ export function FinanceiroHero() {
               </Link>
             </div>
 
-            <div className="flex gap-5 flex-wrap text-sm" style={{ color: "var(--muted)" }}>
+            <div className="flex gap-5 flex-wrap font-mono text-[11px] uppercase tracking-[0.12em]" style={{ color: "var(--muted)" }}>
               {["PIX nativo", "Recibo automático", "Sem taxa no Starter"].map((label) => (
                 <span key={label} className="inline-flex items-center gap-1.5">
                   <CheckIcon size="sm" />

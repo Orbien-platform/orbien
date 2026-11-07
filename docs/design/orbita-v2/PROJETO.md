@@ -122,12 +122,17 @@ item separado. O defeito já existia antes da v2.
   site (ex.: "Cada pessoa, uma história…"). O README diz que o conteúdo não
   muda, então valeu o texto do React, que é o que está no ar. Trocar algum
   título é decisão de copy, não de estilo.
-- **Menção ao design anterior.** A página Sobre ainda cita "Precision Modern"
-  como direção de design, em dois lugares (princípio "Rigor sem frieza" e a
-  linha do tempo). É copy, e precisa de decisão.
-- **Selos do hero nas outras páginas.** Os selos abaixo do CTA viraram mono
-  só na home, que é onde o print da v2 mostra. Nas outras páginas seguem em
-  sans.
+- ~~**Menção ao design anterior.**~~ Feito em 2026-11-06 (branch
+  `feat/orbita-v2-site-copy`): a Sobre cita a Órbita no princípio "Rigor sem
+  frieza" e na linha do tempo ("Design system Órbita finalizado").
+- ~~**Selos do hero nas outras páginas.**~~ Feito na mesma branch: Membros,
+  Pequenos grupos, Conteúdo, Financeiro e Sem CNPJ usam mono, como a home.
+- **Dízimo recorrente fora do texto de abertura.** O lead do hero do
+  Financeiro e o card do hub deixam de apresentar o dízimo recorrente como
+  entregue (a cobrança Asaas segue atrás de `ASAAS_PAYMENTS_ENABLED`, PROD-28).
+  Ele continua descrito, como "Somente Premium", nos cenários de PIX, na
+  comparação de planos e no FAQ. Segue sem fonte o "Migração em 15 min" do Sem
+  CNPJ (copy do React, não da v2).
 - ~~**Reescrita do guia de marca.**~~ Feita em 2026-11-06: a seção 3 de
   `design-reference/orbien-brand-guidelines.md` descreve a Órbita, e a seção 5
   perdeu as referências à v1.
