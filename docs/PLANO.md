@@ -2572,12 +2572,17 @@ e esquecer do `permissions.ts`" — não precisou chegar.
   `orbien_app_auth USING (true)`.**~~ **Fechado em 2026-11-05 (ação C)** — ver o
   registro no fim do item. Só `refresh_tokens` mantém `orbien_app_auth` (escrita
   viva por desenho).
-- **Nenhuma tabela de plataforma tem `FORCE ROW LEVEL SECURITY`.** O dono
-  (`postgres`, que é o `prisma.system`) passa por cima — é o mesmo desenho do
-  `fix_rls_enforcement`, e é o que permite o `seed.ts` existir.
-- **Rate limit de login por IP** depende de `X-Forwarded-For` confiável atrás
-  do Render. O recorte por origem fechou em 2026-09-07 com
-  `app.set('trust proxy', 1)`; o que resta é decisão de infra, não código.
+- **`refresh_tokens` com `orbien_app_auth FOR ALL USING (true)`** — **release 1
+  entregue em 2026-11-06** (leitura por `auth_refresh_lookup` e escrita em
+  contexto `app_user`); a **release 2** (derrubar a policy) segue aberta e é
+  commit/PR à parte. Ver "Ação E" abaixo.
+- ~~**`FORCE ROW LEVEL SECURITY` nas tabelas de plataforma.**~~ **Avaliado em
+  2026-11-06: não fazer** (ganho zero com o dono `postgres` — superuser/`BYPASSRLS`
+  ignora FORCE). Ver "Ação E · FORCE".
+- **Rate limit de login por IP** — o IP que a API via para tudo que passa pelo web
+  era o de saída da Vercel. **Ajuste de código entregue em 2026-11-06**
+  (`ORBIEN_PROXY_SECRET`); falta o dono configurar a variável nas duas pontas.
+  Ver "Ação E · IP".
 
 **Revisitado em 2026-09-13, sem mudança de código.** Dos três pontos, dois
 não são código (rate limit é infra) e o terceiro segue exatamente como o
@@ -2795,17 +2800,121 @@ certo, em cada caminho; corpo do 401 idêntico nas quatro recusas), não por
 medição de tempo. O hash fixo nunca autentica: o resultado do verify é
 descartado quando não há conta.
 
-**Segue aberto em PEND-04:** `FORCE ROW LEVEL SECURITY` nas tabelas de
-plataforma (dono passa por cima — mesmo desenho do `fix_rls_enforcement`, e é o
-que permite o `seed.ts`); rate limit de login por IP depende de
-`X-Forwarded-For` confiável atrás do Render (infra, não código);
-`refresh_tokens` com `orbien_app_auth FOR ALL` (escrita viva).
+**Segue aberto em PEND-04:** a release 2 de `refresh_tokens` (ver Ação E) e, em
+produção, a configuração de `ORBIEN_PROXY_SECRET` e as duas consultas de
+confirmação.
 
 **`TEMP DEBUG` removidos em 2026-11-06** (`auth.service.ts` e
 `login-rate-limit.service.ts`): escreviam no log o e-mail e o motivo exato da
 recusa, desfazendo no log a indistinguibilidade que o 401 mantém. Nenhum log de
 recusa ficou; teste por spy no `Logger` e no `console` prova que nenhum caminho
 de `login`/`platformLogin` (recusa ou sucesso) e nem o 429 escrevem log.
+
+### PEND-04 · Ação E (2026-11-06) · `refresh_tokens`, FORCE RLS, IP do rate limit, registro da ação C
+
+**Registro do que aconteceu na ação C (PR #212).** O PLANO descrevia duas
+releases (expandir `034`, contrair `035`). Não foram duas: `874c9f1` (expandir,
+13:53:49 UTC) e `8adfda1` (contrair, 13:54:10 UTC) têm 21 s de diferença e
+entraram no mesmo PR (merge `d1689a8`, 05/11). O `bootstrap-db.sh` roda o `034` e
+o `035` na mesma execução, e o Render o aplica no deploy: funções e queda das
+policies chegaram ao banco juntas. Janela de risco que existiu: entre o
+bootstrap e a troca da instância, o código antigo (lê `tenants` etc. como
+`orbien_app`) leria 0 linhas nas rotas públicas. Sem evidência de incidente; a
+produção foi verificada saudável em `abdce8f` (`/api/health`, doação pública e
+leituras públicas 200). Consequência que fica: **rollback da API para antes do
+#212 não é seguro** (o código antigo precisa da policy) — o caminho é reverter
+`8adfda1` e redeployar. A causa foi processo (duas commits no mesmo PR), não o
+desenho; por isso a ação E separa as releases de verdade (abaixo).
+
+**`refresh_tokens` — release 1 (expandir), 2026-11-06.**
+`036_rls_refresh_lookup.sql`, `auth-lookup.ts` (`findRefreshTokenByHash`,
+`withRefreshContext`), `auth.service.ts`, passo 7 do `bootstrap-db.sh`,
+`test/rls/auth-tables.spec.ts` e `test/integration/auth-refresh-tokens.spec.ts`.
+
+| Consumidor | Contexto | Destino |
+|---|---|---|
+| `createRefreshToken` (`login`, `platformLogin`) | `orbien_app` sem contexto | INSERT em `withRefreshContext` |
+| `refresh`: leitura por hash | `orbien_app` | `auth_refresh_lookup(hash)` |
+| `refresh`: reuso, conta/tenant inativo, corrida perdida | `orbien_app` | `revokeFamily` em `withRefreshContext` |
+| `refresh`: claim + INSERT + link | `orbien_app` | mesma transação, em `withRefreshContext` |
+| `logout` | `orbien_app` | lookup por hash + UPDATE em contexto |
+| Transferência de conta | plataforma (`own_tokens`) | sem mudança |
+| `resetPassword`, retenção CONF-02 | `prisma.system` | sem mudança (testado com a policy ausente) |
+
+- **Por que híbrido.** Só policy é impossível na leitura (o refresh entra com hash,
+  não com usuário). Só funções moveria a detecção de reuso e a rotação
+  serializada para SQL. Híbrido: uma função de leitura exata (sem o hash na
+  resposta, `search_path` fixo, `EXECUTE` só `orbien_app`) e toda escrita como
+  `app_user` com `app.user_id` e `app.tenant_id` do dono — a `own_tokens` amarra a
+  escrita àquele usuário. O tenant fica fixado de propósito: sem ele o ramo
+  `app_platform_access()` abriria os tokens de todos os tenants para uma conta
+  `platform_support` (coberto por teste).
+- **Lógica de reuso e rotação intactas** (em TypeScript, mesmas mensagens de 401).
+  Única diferença de ordem: a conta é lida antes da detecção de reuso, porque a
+  escrita precisa do tenant do dono.
+- **Prova da release 2 sem entregá-la.** `auth-refresh-tokens.spec.ts` roda o fluxo
+  inteiro (login, rotação encadeada, reuso, duas rotações simultâneas, conta
+  inativa, logout, login de plataforma, retenção) duas vezes: com a policy
+  `orbien_app_auth` e **sem ela** (derrubada por DDL e recolocada no `afterAll`).
+- **Release 2 (a fazer, branch/PR à parte, só com a 1 estável em produção):**
+  `037_rls_refresh_tokens_close.sql` (`DROP POLICY orbien_app_auth ON refresh_tokens`,
+  recusa rodar se `auth_refresh_lookup` não existir), tira o bloco de
+  `refresh_tokens` do `017`, liga o `037` no bootstrap **depois** do `017` e inverte
+  o passo 7 (zero `orbien_app_auth`, `own_tokens` presente). **O `037` não existe na
+  branch da release 1** — é o que impede repetir o #212. Gate entre as duas:
+  deploy da 1 saudável e login + refresh + logout reais em `teste1-church` com
+  200. Rollback da 2: reverter o commit e redeployar (o `017` antigo recria a
+  policy). Rollback da 1 depois da 2 não é seguro.
+- **Resíduo declarado:** quem tem a credencial `orbien_app` ainda pode fazer
+  `SET ROLE app_user` e fixar `app.user_id` à vontade (vale para o banco inteiro,
+  desde antes). O ganho é contra leitura/escrita/`DELETE` sem contexto
+  (enumeração, revogação em massa, injeção de SQL), não contra vazamento da
+  credencial.
+- **Achado fora de escopo:** `revokeRefreshToken` do web (`lib/session.ts`) chama
+  `POST /auth/logout` sem `Authorization`, e a rota exige `JwtAuthGuard` — o
+  logout do web provavelmente nunca revoga o token na API (falha silenciosa, por
+  desenho do `try/catch`). Não corrigido aqui.
+
+**FORCE ROW LEVEL SECURITY — avaliado: não fazer.**
+- `pg_class` local: 69 tabelas já têm FORCE; 13 não — as 8 de auth/plataforma
+  (`tenants`, `congregations`, `branding_configs`, `tenant_plans`,
+  `user_accounts`, `role_assignments`, `refresh_tokens`, `audit_logs`) mais
+  `audience_segments`, `content_posts`, `ministries`, `volunteer_profiles` e
+  `waitlist_subscribers`. A inconsistência é histórica, não uma norma que falta.
+- FORCE só sujeita o **dono** da tabela à RLS; superusuário e roles com
+  `BYPASSRLS` ignoram sempre (manual do Postgres). Local, `postgres` é as duas
+  coisas; o `DIRECT_URL` de produção também é `postgres`. Logo FORCE não muda nada
+  para o `prisma.system` — nem nas 69 onde já está.
+- Custo se funcionasse: `seed.ts`, retenções, purges, crons e
+  `app_is_platform_support()` (SECURITY DEFINER, lê `role_assignments` como dono;
+  o cabeçalho do `004` documenta a ausência de FORCE) passariam a depender de
+  policy. Ganho real hoje: zero.
+- **A confirmar em produção, só leitura** (via `DIRECT_URL`):
+  `select rolsuper, rolbypassrls from pg_roles where rolname = current_user;`. Se
+  `rolbypassrls = f`, reabrir a avaliação (aí FORCE parcial exigiria um role
+  próprio para seed e jobs).
+
+**IP do rate limit — ajuste de código, 2026-11-06.**
+- Achado: o login, o refresh e o logout do web (`api/session/route.ts`,
+  `lib/session.ts`) não repassavam IP nenhum; o `/api-proxy` repassa o
+  `X-Forwarded-For` da Vercel, mas com `trust proxy 1` o Express usa o salto mais
+  à direita, que é a Vercel. Para tudo que passa pelo web, `req.ip` é IP de saída
+  da Vercel: `POST /auth/login` (20/15 min), `forgot/reset` (10/h), doação pública
+  (por igreja + IP) e visitante (300/h) dividem um balde. Admin e mobile chamam a
+  API direto e não são afetados. **A confirmar em produção:**
+  `select ip, count(*) from audit_logs where created_at > now() - interval '1 day'
+  group by 1 order by 2 desc limit 10;` — poucos IPs nas ações do web confirmam.
+- **Não** subir `trust proxy` para 2: mobile e admin chamam direto, e um
+  `X-Forwarded-For` forjado viraria o IP.
+- Desenho: o servidor do web manda `x-orbien-client-ip` (de `x-real-ip` /
+  1º `x-forwarded-for`, escritos pela borda da Vercel) e `x-orbien-proxy-auth`
+  (`ORBIEN_PROXY_SECRET`). A API (`common/middleware/proxy-client-ip.ts`, em
+  `main.ts`) só sobrescreve `req.ip` com o segredo conferido em tempo constante e
+  um IP válido; apaga os dois cabeçalhos sempre. O `/api-proxy` descarta os
+  `x-orbien-*` que vierem do browser.
+- **Rollout** (variável é do dono): (1) deploy da API (inerte); (2) pôr o **mesmo**
+  `ORBIEN_PROXY_SECRET` no Render e na Vercel (`apps/web`); (3) deploy do web.
+  Desfazer = apagar a variável. Sem ela, comportamento de antes.
 
 ### ~~PEND-05 · Três achados menores de PROD-20, declarados no PR~~ · fechado
 

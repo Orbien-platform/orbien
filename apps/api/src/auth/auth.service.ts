@@ -11,7 +11,12 @@ import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { hashToken } from '../common/crypto/token-hash';
 import { PrismaService } from '../prisma/prisma.service';
-import { findLoginByEmail, findSessionByUserId } from './auth-lookup';
+import {
+  findLoginByEmail,
+  findRefreshTokenByHash,
+  findSessionByUserId,
+  withRefreshContext,
+} from './auth-lookup';
 import { findImpersonateTarget } from '../common/public-lookup';
 import { MailService } from '../mail/mail.service';
 import { PLATFORM_MAIL_BRAND, TENANT_MAIL_BRAND_SELECT, tenantMailBrand } from '../mail/mail-brand';
@@ -167,7 +172,7 @@ export class AuthService {
     };
 
     const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    const refresh_token = await this.createRefreshToken(user.user_id);
+    const refresh_token = await this.createRefreshToken(user.user_id, user.tenant_id);
 
     return { access_token, refresh_token, expires_in: EXPIRES_IN };
   }
@@ -242,7 +247,7 @@ export class AuthService {
     };
 
     const access_token = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    const refresh_token = await this.createRefreshToken(user.user_id);
+    const refresh_token = await this.createRefreshToken(user.user_id, user.tenant_id);
 
     return { access_token, refresh_token, expires_in: EXPIRES_IN };
   }
@@ -252,18 +257,21 @@ export class AuthService {
   ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
     const hash = this.hashToken(dto.refresh_token);
 
-    const stored = await this.prisma.refreshToken.findUnique({
-      where: { token_hash: hash },
-    });
+    // Leitura por hash exato (036): `orbien_app` não lê `refresh_tokens` direto.
+    const stored = await findRefreshTokenByHash(this.prisma, hash);
 
     if (!stored) throw new UnauthorizedException('Token inválido');
 
+    // Conta, papéis e tenant vêm da função SECURITY DEFINER (PEND-04 D). A FK
+    // com cascade garante a conta; se vier vazia, o token é inválido. Vem antes
+    // da detecção de reuso porque toda escrita em `refresh_tokens` precisa do
+    // tenant do dono para fixar o contexto (`revokeFamily`).
+    const userAccount = await findSessionByUserId(this.prisma, stored.user_account_id);
+    if (!userAccount) throw new UnauthorizedException('Token inválido');
+
     // Token reuse detected: revoke entire family to contain possible theft
     if (stored.revoked_at !== null) {
-      await this.prisma.refreshToken.updateMany({
-        where: { user_account_id: stored.user_account_id, revoked_at: null },
-        data: { revoked_at: new Date() },
-      });
+      await this.revokeFamily(stored.user_account_id, userAccount.tenant_id);
       throw new UnauthorizedException('Sessão encerrada por segurança. Faça login novamente.');
     }
 
@@ -288,17 +296,8 @@ export class AuthService {
     // Derruba a família toda, e não só este token, pela mesma razão da detecção
     // de reuso logo acima: o que se quer é encerrar a sessão, não invalidar um
     // elo e deixar os outros de pé.
-    // Conta, papéis e tenant vêm da função SECURITY DEFINER (PEND-04 D): o
-    // `include userAccount` de antes lia `user_accounts` por `orbien_app`. A FK
-    // com cascade garante a conta; se vier vazia, o token é tratado como inválido.
-    const userAccount = await findSessionByUserId(this.prisma, stored.user_account_id);
-    if (!userAccount) throw new UnauthorizedException('Token inválido');
-
     if (!userAccount.is_active || !userAccount.tenant_is_active) {
-      await this.prisma.refreshToken.updateMany({
-        where: { user_account_id: stored.user_account_id, revoked_at: null },
-        data: { revoked_at: new Date() },
-      });
+      await this.revokeFamily(stored.user_account_id, userAccount.tenant_id);
       throw new UnauthorizedException('Sessão encerrada. Faça login novamente.');
     }
 
@@ -314,7 +313,10 @@ export class AuthService {
     // "com sucesso", bifurcando a família em silêncio e sem o alarme de
     // reuso que existe exatamente para isto. `count` é quem decide quem
     // venceu a corrida.
-    const rotated = await this.prisma.$transaction(async (tx) => {
+    const rotated = await withRefreshContext(
+      this.prisma,
+      { userId: stored.user_account_id, tenantId: userAccount.tenant_id },
+      async (tx) => {
       const reivindicado = await tx.refreshToken.updateMany({
         where: { id: stored.id, revoked_at: null },
         data: { revoked_at: new Date() },
@@ -336,7 +338,8 @@ export class AuthService {
       });
 
       return created;
-    });
+      },
+    );
 
     if (!rotated) {
       // Perdeu a corrida: trata como o reuso detectado logo no topo deste
@@ -357,10 +360,7 @@ export class AuthService {
       // que o lado perdedor tem é "este id já estava revogado", e é
       // exatamente esse sinal que soa alarme quando é theft de verdade —
       // amaciar a resposta aqui teria o mesmo efeito para as duas causas.
-      await this.prisma.refreshToken.updateMany({
-        where: { user_account_id: stored.user_account_id, revoked_at: null },
-        data: { revoked_at: new Date() },
-      });
+      await this.revokeFamily(stored.user_account_id, userAccount.tenant_id);
       throw new UnauthorizedException('Sessão encerrada por segurança. Faça login novamente.');
     }
 
@@ -382,10 +382,21 @@ export class AuthService {
 
   async logout(refreshToken: string): Promise<{ message: string }> {
     const hash = this.hashToken(refreshToken);
-    await this.prisma.refreshToken.updateMany({
-      where: { token_hash: hash, revoked_at: null },
-      data: { revoked_at: new Date() },
-    });
+    // Hash desconhecido não é erro (idempotente, como era). Achado o dono, a
+    // revogação roda no contexto dele — `orbien_app` não escreve direto.
+    const stored = await findRefreshTokenByHash(this.prisma, hash);
+    const owner = stored ? await findSessionByUserId(this.prisma, stored.user_account_id) : null;
+    if (stored && owner) {
+      await withRefreshContext(
+        this.prisma,
+        { userId: stored.user_account_id, tenantId: owner.tenant_id },
+        (tx) =>
+          tx.refreshToken.updateMany({
+            where: { token_hash: hash, revoked_at: null },
+            data: { revoked_at: new Date() },
+          }),
+      );
+    }
     return { message: 'Sessão encerrada.' };
   }
 
@@ -555,16 +566,31 @@ export class AuthService {
     return { message: 'Senha redefinida com sucesso.' };
   }
 
-  private async createRefreshToken(userAccountId: string): Promise<string> {
+  private async createRefreshToken(userAccountId: string, tenantId: string): Promise<string> {
     const raw = randomBytes(64).toString('hex');
-    await this.prisma.refreshToken.create({
-      data: {
-        user_account_id: userAccountId,
-        token_hash: this.hashToken(raw),
-        expires_at: this.refreshExpiry(),
-      },
-    });
+    await withRefreshContext(this.prisma, { userId: userAccountId, tenantId }, (tx) =>
+      tx.refreshToken.create({
+        data: {
+          user_account_id: userAccountId,
+          token_hash: this.hashToken(raw),
+          expires_at: this.refreshExpiry(),
+        },
+      }),
+    );
     return raw;
+  }
+
+  /**
+   * Revoga a família inteira do usuário (reuso detectado, conta/tenant inativo,
+   * corrida perdida). No contexto do dono, por `own_tokens`.
+   */
+  private async revokeFamily(userAccountId: string, tenantId: string): Promise<void> {
+    await withRefreshContext(this.prisma, { userId: userAccountId, tenantId }, (tx) =>
+      tx.refreshToken.updateMany({
+        where: { user_account_id: userAccountId, revoked_at: null },
+        data: { revoked_at: new Date() },
+      }),
+    );
   }
 
   // SHA-256 (helper compartilhado com o token de redefinição): ver common/crypto/token-hash.ts.

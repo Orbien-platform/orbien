@@ -125,6 +125,24 @@ describe("POST /api/session (login)", () => {
     expect(await res.json()).toEqual({ code: "TENANT_NOT_FOUND" });
   });
 
+  it("manda à API o IP que a borda viu, com o segredo (rate limit por IP não pode ser da Vercel)", async () => {
+    vi.stubEnv("ORBIEN_PROXY_SECRET", "s3cret");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-real-ip": "203.0.113.9" },
+      body: JSON.stringify({ email: "a@b.com" }),
+    });
+    await POST(request);
+
+    const init = fetchMock.mock.calls[0][1] as { headers: Record<string, string> };
+    expect(init.headers["x-orbien-client-ip"]).toBe("203.0.113.9");
+    expect(init.headers["x-orbien-proxy-auth"]).toBe("s3cret");
+    vi.unstubAllEnvs();
+  });
+
   it("repassa o status com corpo vazio quando o erro da API não vem em JSON", async () => {
     vi.stubGlobal(
       "fetch",

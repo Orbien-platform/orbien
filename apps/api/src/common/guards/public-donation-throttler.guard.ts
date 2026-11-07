@@ -12,8 +12,9 @@ import { ThrottlerGuard } from '@nestjs/throttler';
  * separa as igrejas entre si; o que protege cada uma contra abuso é o teto de
  * cobranças pendentes por tenant, que vive no banco (`PixService`).
  *
- * Hipótese a validar em staging, não verificada: qual IP chega em `req.ip`
- * quando a requisição vem pelo `apps/web` na Vercel.
+ * O IP que chega em `req.ip` pelo `apps/web` é o do cliente só quando
+ * `ORBIEN_PROXY_SECRET` está configurado nas duas pontas
+ * (`common/middleware/proxy-client-ip.ts`); sem ele é o de saída da Vercel.
  */
 @Injectable()
 export class PublicDonationThrottlerGuard extends ThrottlerGuard {

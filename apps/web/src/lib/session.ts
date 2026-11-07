@@ -225,11 +225,14 @@ export async function fetchPermissions(accessToken: string): Promise<SessionPerm
  * chama (logout, ou o bloqueio de login em `route.ts`) não pode travar por
  * causa disso.
  */
-export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+export async function revokeRefreshToken(
+  refreshToken: string,
+  extraHeaders: Record<string, string> = {}
+): Promise<void> {
   try {
     await fetch(`${BACKEND_URL}/auth/logout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
   } catch {
@@ -259,10 +262,13 @@ export interface TokenPair {
  * quando o token estava em `localStorage`, e só some com trava compartilhada
  * do lado do servidor.
  */
-export async function rotate(refreshToken: string): Promise<TokenPair | null> {
+export async function rotate(
+  refreshToken: string,
+  extraHeaders: Record<string, string> = {}
+): Promise<TokenPair | null> {
   const res = await fetch(`${BACKEND_URL}/auth/refresh`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
   if (!res.ok) return null;

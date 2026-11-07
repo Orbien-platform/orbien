@@ -69,3 +69,51 @@ export async function findTenantAdminUserId(
   `;
   return rows[0]?.id ?? null;
 }
+
+/**
+ * `refresh_tokens` (PEND-04, release 1 de 2).
+ *
+ * O refresh entra com um HASH, não com o usuário, então a leitura sem contexto
+ * é a função `auth_refresh_lookup` (036): hash exato, no máximo uma linha, sem
+ * o hash na resposta. Toda ESCRITA roda em `withRefreshContext`, que vira
+ * `app_user` e fixa o dono do token — a `own_tokens` amarra a escrita a ele.
+ */
+export interface RefreshTokenRow {
+  id: string;
+  user_account_id: string;
+  expires_at: Date;
+  revoked_at: Date | null;
+}
+
+export async function findRefreshTokenByHash(
+  client: Client,
+  tokenHash: string,
+): Promise<RefreshTokenRow | null> {
+  const rows = await client.$queryRaw<RefreshTokenRow[]>`
+    SELECT * FROM auth_refresh_lookup(${tokenHash})
+  `;
+  return rows[0] ?? null;
+}
+
+/**
+ * Transação com o contexto mínimo para `own_tokens`: `SET LOCAL ROLE app_user`
+ * (o mesmo que o `TenantContextInterceptor` faz) e `app.user_id`/`app.tenant_id`
+ * do dono. O tenant fica fixado de propósito: sem ele o ramo
+ * `app_platform_access()` da policy abriria os tokens de todos os tenants para
+ * uma conta `platform_support`.
+ */
+export async function withRefreshContext<T>(
+  prisma: PrismaClient,
+  ctx: { userId: string; tenantId: string },
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe('SET LOCAL ROLE app_user');
+    await tx.$executeRaw`
+      SELECT
+        set_config('app.tenant_id', ${ctx.tenantId}, true),
+        set_config('app.user_id',   ${ctx.userId},   true)
+    `;
+    return fn(tx);
+  });
+}
